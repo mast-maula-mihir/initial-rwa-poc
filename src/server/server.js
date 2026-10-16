@@ -41,45 +41,49 @@ app.use('/api/dashboard', require('./routes/dashboard'));
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/ipfs', require('./routes/ipfs'));
 
-// Web3 assessment endpoint
-app.get('/PrashantGuptaApiTest', async (req, res) => {
-  try {
-   const provider = new ethers.providers.JsonRpcProvider(
-  'https://ethereum-sepolia-rpc.publicnode.com'
+// Web3 assessment endpoint: read-only data from the USDC contract (Ethereum mainnet)
+const provider = new ethers.providers.JsonRpcProvider(
+  process.env.RPC_URL || 'https://ethereum-rpc.publicnode.com'
 );
+const USDC_ADDRESS = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48';
+const ERC20_ABI = [
+  'function name() view returns (string)',
+  'function symbol() view returns (string)',
+  'function decimals() view returns (uint8)',
+  'function totalSupply() view returns (uint256)',
+  'function balanceOf(address account) view returns (uint256)'
+];
 
-    const contractAddress = '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238';
+app.get('/MihirRanadeApiTest', async (req, res) => {
+  const { address } = req.query;
+  if (address !== undefined && !ethers.utils.isAddress(address)) {
+    return res.status(400).json({ error: 'Invalid address query parameter' });
+  }
 
-    const abi = [
-      'function name() view returns (string)',
-      'function symbol() view returns (string)',
-      'function decimals() view returns (uint8)'
-    ];
-
-    const contract = new ethers.Contract(contractAddress, abi, provider);
-
-    const name = await contract.name();
-    const symbol = await contract.symbol();
-    const decimals = await contract.decimals();
+  try {
+    const contract = new ethers.Contract(USDC_ADDRESS, ERC20_ABI, provider);
+    const [name, symbol, decimals, totalSupply, balance] = await Promise.all([
+      contract.name(),
+      contract.symbol(),
+      contract.decimals(),
+      contract.totalSupply(),
+      address ? contract.balanceOf(address) : Promise.resolve(null)
+    ]);
 
     const result = {
-      contractAddress,
+      contractAddress: USDC_ADDRESS,
       name,
       symbol,
-      decimals: Number(decimals)
+      decimals,
+      totalSupply: ethers.utils.formatUnits(totalSupply, decimals),
+      ...(address && { holder: address, balance: ethers.utils.formatUnits(balance, decimals) })
     };
 
-    console.log('Smart contract data fetched successfully:');
-    console.log(result);
-
+    console.log('Smart contract data fetched successfully:', result);
     res.json(result);
   } catch (error) {
     console.error('Smart contract error:', error.message);
-
-    res.status(500).json({
-      error: 'Failed to fetch smart contract data',
-      message: error.message
-    });
+    res.status(502).json({ error: 'Failed to fetch smart contract data' });
   }
 });
 
